@@ -1,0 +1,39 @@
+# Compiled binaries & packages
+target/
+**/target/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Development tools & runtime
+tools/
+*.log
+.DS_Store
+
+# IDE & Editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Documentation, reports, temporary scripts & screenshots
+*.docx
+*.doc
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.svg
+extracted_report_images/
+*.py
+*.tmp
