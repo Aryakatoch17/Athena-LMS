@@ -53,6 +53,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   // Checkout Form State
   const [availableBooks, setAvailableBooks] = useState<Book[]>([]);
   const [activeMembers, setActiveMembers] = useState<Member[]>([]);
+  const [isLoadingPrerequisites, setIsLoadingPrerequisites] = useState(false);
   const [checkoutData, setCheckoutData] = useState<CheckoutRequest>({
     bookId: 0,
     memberId: 0,
@@ -88,9 +89,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return () => clearTimeout(timer);
   }, [statusFilter, searchQuery, fetchTransactions]);
 
-  // Load books and members when checkout modal opens
-  const handleOpenCheckoutModal = async () => {
+  // Load books and members whenever checkout modal opens
+  const loadCheckoutPrerequisites = useCallback(async () => {
     try {
+      setIsLoadingPrerequisites(true);
       const [booksRes, membersRes] = await Promise.all([
         bookApi.getAll({ size: 100 }),
         memberApi.getAll({ size: 100 }),
@@ -98,17 +100,31 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       const available = booksRes.content.filter((b) => b.availableCopies > 0);
       setAvailableBooks(available);
       setActiveMembers(membersRes.content);
-      if (available.length > 0 && membersRes.content.length > 0) {
-        setCheckoutData({
-          bookId: available[0].id,
-          memberId: membersRes.content[0].id,
-          loanPeriodDays: 14,
-        });
+
+      const firstActiveMember = membersRes.content.find((m) => m.membershipStatus !== 'SUSPENDED') || membersRes.content[0];
+      if (available.length > 0 && firstActiveMember) {
+        setCheckoutData((prev) => ({
+          ...prev,
+          bookId: prev.bookId && available.some((b) => b.id === prev.bookId) ? prev.bookId : available[0].id,
+          memberId: prev.memberId && membersRes.content.some((m) => m.id === prev.memberId) ? prev.memberId : firstActiveMember.id,
+          loanPeriodDays: prev.loanPeriodDays || 14,
+        }));
       }
-      setIsCheckoutModalOpen(true);
     } catch (err) {
       error('Failed to initialize checkout desk', extractErrorMessage(err));
+    } finally {
+      setIsLoadingPrerequisites(false);
     }
+  }, [error]);
+
+  useEffect(() => {
+    if (isCheckoutModalOpen) {
+      loadCheckoutPrerequisites();
+    }
+  }, [isCheckoutModalOpen, loadCheckoutPrerequisites]);
+
+  const handleOpenCheckoutModal = () => {
+    setIsCheckoutModalOpen(true);
   };
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
@@ -378,16 +394,23 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <select
               value={checkoutData.memberId}
               onChange={(e) => setCheckoutData({ ...checkoutData, memberId: Number(e.target.value) })}
-              className="w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100"
+              disabled={isLoadingPrerequisites}
             >
-              {activeMembers.map((m) => {
-                const isSuspended = m.membershipStatus === 'SUSPENDED';
-                return (
-                  <option key={m.id} value={m.id} disabled={isSuspended}>
-                    {m.fullName} ({m.membershipId}) {isSuspended ? '[SUSPENDED]' : ''}
-                  </option>
-                );
-              })}
+              {isLoadingPrerequisites ? (
+                <option value={0}>Loading cardholders...</option>
+              ) : activeMembers.length === 0 ? (
+                <option value={0}>No cardholders registered</option>
+              ) : (
+                activeMembers.map((m) => {
+                  const isSuspended = m.membershipStatus === 'SUSPENDED';
+                  return (
+                    <option key={m.id} value={m.id} disabled={isSuspended}>
+                      {m.fullName} ({m.membershipId}) {isSuspended ? '[SUSPENDED]' : ''}
+                    </option>
+                  );
+                })
+              )}
             </select>
           </div>
 
@@ -399,9 +422,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <select
               value={checkoutData.bookId}
               onChange={(e) => setCheckoutData({ ...checkoutData, bookId: Number(e.target.value) })}
-              className="w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-100"
+              disabled={isLoadingPrerequisites}
             >
-              {availableBooks.length === 0 ? (
+              {isLoadingPrerequisites ? (
+                <option value={0}>Loading available titles...</option>
+              ) : availableBooks.length === 0 ? (
                 <option value={0}>No titles with available copies</option>
               ) : (
                 availableBooks.map((b) => (
